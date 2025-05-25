@@ -1,2 +1,4 @@
 dev/.env
+prod/.env
+dev/letsencrypt/
 prod/letsencrypt/
