@@ -1,0 +1,65 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: lynxlinkage-postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepassword}
+      POSTGRES_USER: ${POSTGRES_USER:-lynxlinkage}
+      POSTGRES_DB: ${POSTGRES_DB:-lynxlinkage}
+      POSTGRES_MULTIPLE_DATABASES: "${AUTHENTIK_DB:-authentik}"
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lynxlinkage}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Authentik - Open Source Identity Provider
+  authentik-server:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: lynxlinkage-authentik
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__USER: ${POSTGRES_USER:-lynxlinkage}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD:-securepassword}
+      # Generate a random secret key with: openssl rand -base64 36
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-yoursecretkey}
+      # Error reporting
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    volumes:
+      - authentik_media:/media
+      - authentik_custom_templates:/templates
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+
+  # Redis - required for Authentik
+  redis:
+    image: redis:alpine
+    container_name: lynxlinkage-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  authentik_media:
+  authentik_custom_templates:
+  redis_data:
