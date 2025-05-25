@@ -1,0 +1,62 @@
+services:
+  traefik:
+    image: traefik:v2.9
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80" # HTTP
+      - "443:443" # HTTPS
+    command:
+      - "--api.dashboard=true" # Enable Traefik dashboard
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false" # Don't expose all containers automatically
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure" # Redirect HTTP to HTTPS
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=coastq22889@icloud.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - app-network
+    labels:
+      - "traefik.enable=true"
+      # Dashboard configuration
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.lynxlinkage.com`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      # Basic auth middleware - secure your dashboard
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$talyt1xk$$Zh.dPys3L8fWFteUFJHXe0"
+    
+  mkupapp:
+    image: mkupapp:latest
+    container_name: mkupapp
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://0.0.0.0:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    environment:
+      - NODE_ENV=production
+    networks:
+      - app-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mkupapp.rule=Host(`app.lynxlinkage.com`)"
+      - "traefik.http.routers.mkupapp.entrypoints=websecure"
+      - "traefik.http.routers.mkupapp.tls=true"
+      - "traefik.http.routers.mkupapp.tls.certresolver=myresolver"
+      - "traefik.http.services.mkupapp.loadbalancer.server.port=3000"
+    
+networks:
+  app-network:
+    driver: bridge
